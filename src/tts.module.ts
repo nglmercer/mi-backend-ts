@@ -1,7 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import wav from 'wav';
 import { Buffer } from 'buffer';
-
+import {
+  type TTSVoiceName,
+  TTS_VOICE_NAMES,
+  TTS_VOICE_CHARACTERISTICS
+} from './constants/voices.js'
 // Interfaz para definir las opciones que nuestra función aceptará
 export interface GenerateAudioOptions {
   text: string;
@@ -9,7 +13,7 @@ export interface GenerateAudioOptions {
   model?: string; // Parámetro opcional
   speakers?: {
     speaker: string;
-    voiceName: string;
+    voiceName: TTSVoiceName;
   }[]; // Array de objetos de hablante, opcional
 }
 

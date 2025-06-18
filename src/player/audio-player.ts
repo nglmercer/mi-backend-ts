@@ -160,7 +160,7 @@ class Player extends EventEmitter {
         if (err) {
           return reject(err);
         }
-        const audioStream = data.streams.find(s => s.codec_type === 'audio');
+        const audioStream = data.streams.find((s: any) => s.codec_type === 'audio');
         if (!audioStream) {
           return reject(new Error('No audio stream found in file'));
         }

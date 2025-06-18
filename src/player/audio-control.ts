@@ -2,9 +2,8 @@
 
 import path from 'path';
 import { fileURLToPath } from 'url';
-import Player from './audio-player.js'; // Nota la extensión .js
-import { AudioQueue } from './audio-queue.js'; // Nota la extensión .js
-
+import Player from './audio-player.js';
+import { AudioQueue } from './audio-queue.js'; 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

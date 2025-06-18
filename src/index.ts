@@ -1,69 +1,98 @@
-import { Elysia, t,file } from 'elysia';
-import { node } from '@elysiajs/node'
-import { generateAudio, type GenerateAudioOptions } from './tts.module'; // Asegúrate de que la ruta sea correcta
+// src/index.ts
+
 import { mkdir } from 'node:fs/promises';
+import { Elysia, t, file } from 'elysia';
+import { node } from '@elysiajs/node'
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
-import { AudioQueue, player } from './audio-control';
+import { generateAudio, type GenerateAudioOptions } from './tts.module.js';
+import { AudioQueue, player } from './player/audio-control.js';
+import 'dotenv/config';
+import {
+  TTS_VOICE_NAMES,
+  TTS_VOICE_CHARACTERISTICS
+} from './constants/voices.js';
 
 // --- Constantes y Configuración Inicial ---
 const PORT = process.env.PORT || 3000;
 const OUTPUT_DIR = join(process.cwd(), 'audio_outputs');
 
-// --- Esquema de Validación para el cuerpo de la petición (reemplaza la interfaz) ---
+// --- INICIO DE LA CORRECCIÓN ---
+
+// t.Enum necesita un objeto (Record<string, string>), no un array de strings.
+// Transformamos el array ['Zephyr', 'Puck'] en un objeto { Zephyr: 'Zephyr', Puck: 'Puck' }
+const VoiceNameEnum = TTS_VOICE_NAMES.reduce((acc, name) => {
+  acc[name] = name;
+  return acc;
+}, {} as Record<string, string>);
+
+// --- FIN DE LA CORRECCIÓN ---
+
+
+// --- Esquema de Validación para el cuerpo de la petición (CORREGIDO) ---
 const GenerateAudioBody = t.Object({
   text: t.String({ minLength: 1, error: "El campo 'text' es requerido y no puede estar vacío." }),
   speakers: t.Optional(
     t.Array(
       t.Object({
         speaker: t.String(),
-        voiceName: t.String(),
+        // Ahora usamos el objeto VoiceNameEnum que acabamos de crear
+        voiceName: t.Enum(VoiceNameEnum, { error: "El 'voiceName' proporcionado no es válido." }),
       })
     )
   ),
 });
 
 // Asegurarse de que el directorio de salida exista antes de iniciar el servidor
-(async () => {
-  try {
-    await mkdir(OUTPUT_DIR, { recursive: true });
-    console.log(`✅ Directorio de salida '${OUTPUT_DIR}' está listo.`);
-  } catch (error) {
-    console.error(`❌ Fallo al crear el directorio de salida: ${OUTPUT_DIR}`, error);
-    process.exit(1);
-  }
-})();
-
+// (El resto del archivo no necesita cambios)
+try {
+  mkdir(OUTPUT_DIR, { recursive: true });
+  console.log(`✅ Directorio de salida '${OUTPUT_DIR}' está listo.`);
+} catch (error) {
+  console.error(`❌ Fallo al crear el directorio de salida: ${OUTPUT_DIR}`, error);
+  process.exit(1);
+}
 
 // --- Creación de la aplicación Elysia ---
-const app = new Elysia({ adapter: node() })
+const app = new Elysia({adapter:node()})
   // Hook para manejar errores de forma centralizada
   .onError(({ code, error, set }) => {
     console.error(`❌ Error en el servidor [${code}]:`, error);
     
-    // Errores de validación de Elysia
     if (code === 'VALIDATION') {
       set.status = 400;
       return {
         error: "Petición inválida",
-        details: error.message.toString()
+        details: JSON.parse(error.message)
       };
     }
     
-    // Errores internos del servidor
     set.status = 500;
-    return { error: 'Error Interno del Servidor'};
+    return { error: 'Error Interno del Servidor' };
   })
 
   // Ruta principal para verificar que el servidor está vivo
   .get('/', () => 'TTS API Server is running.')
 
+  // Ruta para obtener la lista de voces disponibles
+  .get('/api/voices', () => {
+    const availableVoices = TTS_VOICE_NAMES.map(name => ({
+      name: name,
+      characteristic: TTS_VOICE_CHARACTERISTICS[name] || 'No especificada'
+    }));
+    return {
+      count: availableVoices.length,
+      voices: availableVoices
+    };
+  })
+
   // Endpoint para generar el audio (POST)
-  .post('/api/generate-audio', async ({ body, request, set }) => {
+  .post('/api/generate-audio', async ({ body, set, request }) => {
     const { text, speakers } = body;
 
+    console.log("🔊 Petición de generación de audio recibida.",text,speakers);
     if (speakers && speakers.length > 0) {
-      console.log("🔊 Petición multi-speaker recibida.");
+      console.log("   Modo multi-speaker detectado.");
     }
     
     const filename = `audio_${Date.now()}.wav`;
@@ -77,31 +106,28 @@ const app = new Elysia({ adapter: node() })
 
     await generateAudio(options);
 
-    const origin = new URL(request.url).origin;
+    const origin = request.headers.get('origin') || `http://${request.headers.get('host')}`;
     const playbackUrl = `${origin}/api/audio/${filename}`;
 
-    // Establecer el código de estado a 201 (Created)
     set.status = 201;
-    //AudioQueue.add(playbackUrl);
-    console.log({
-      filename,
-      playbackUrl
-    })
+    
+    console.log(`✅ Audio generado: ${filename}`);
+    const filePath = join(OUTPUT_DIR, filename);
+    AudioQueue.add(filePath);
+
     return {
       message: '¡Audio generado con éxito!',
       file: filename,
       playbackUrl: playbackUrl,
     };
   }, {
-    // Aquí se aplica la validación automática del cuerpo de la petición
     body: GenerateAudioBody
   })
 
-  // Endpoint para servir/reproducir archivos de audio (GET con parámetro)
+  // Endpoint para servir/reproducir archivos de audio
   .get('/api/audio/:filename', ({ params, set }) => {
     const { filename } = params;
 
-    // Medida de seguridad: Prevenir 'Path Traversal'
     if (filename.includes('..')) {
       set.status = 400;
       return { error: 'Nombre de archivo inválido' };
@@ -114,12 +140,10 @@ const app = new Elysia({ adapter: node() })
       return { error: 'Archivo no encontrado' };
     }
 
-    // Añadir a la cola de reproducción
     AudioQueue.add(filePath);
-    console.log(`▶️ Archivo '${filename}' añadido a la cola y servido.`);
-
-    // Servir el archivo. Elysia se encarga de las cabeceras 'Content-Type'.
-    return file(filePath)
+    console.log(`▶️ Archivo '${filename}' añadido a la cola y servido al cliente.`);
+    
+    return file(filePath);
   })
 
   // Endpoints de control del reproductor
@@ -134,12 +158,6 @@ const app = new Elysia({ adapter: node() })
   })
   
   // Iniciar el servidor
-  .listen(PORT);
-const localaudioPath = join(process.cwd(),'audio_outputs')
-function joinPath(basepath:string,...paths:string[]){
-  return join(basepath,...paths)
-}
-AudioQueue.add(joinPath(localaudioPath,'audio_1750218178225.wav'));
-AudioQueue.add(joinPath(localaudioPath,'audio_1750219520892.wav'));
-player.play()
-console.log(`🚀 TTS API server está escuchando en http://localhost:${app.server?.port}`);
+  .listen(PORT, (server) => {
+    console.log(`🚀 TTS API server está escuchando en http://${server.hostname}:${server.port}`,server.url);
+  });
