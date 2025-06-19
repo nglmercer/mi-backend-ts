@@ -3,6 +3,7 @@
 import { mkdir } from 'node:fs/promises';
 import { Elysia, t, file } from 'elysia';
 import { node } from '@elysiajs/node'
+import { cors } from '@elysiajs/cors'
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { generateAudio, type GenerateAudioOptions } from './tts.module.js';
@@ -17,7 +18,23 @@ import {
 const PORT = process.env.PORT || 3000;
 const OUTPUT_DIR = join(process.cwd(), 'audio_outputs');
 
-// --- INICIO DE LA CORRECCIÓN ---
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+const corsConfig = isDevelopment 
+  ? {
+      // Configuración permisiva para desarrollo
+      origin: true, // Permite todos los orígenes
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    }
+  : {
+      // Configuración restrictiva para producción
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST'],
+      allowedHeaders: ['Content-Type']
+    };
 
 // t.Enum necesita un objeto (Record<string, string>), no un array de strings.
 // Transformamos el array ['Zephyr', 'Puck'] en un objeto { Zephyr: 'Zephyr', Puck: 'Puck' }
@@ -55,6 +72,7 @@ try {
 
 // --- Creación de la aplicación Elysia ---
 const app = new Elysia({adapter:node()})
+  .use(cors(corsConfig))
   // Hook para manejar errores de forma centralizada
   .onError(({ code, error, set }) => {
     console.error(`❌ Error en el servidor [${code}]:`, error);
