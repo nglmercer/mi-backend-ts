@@ -114,7 +114,7 @@ const app = new Elysia({adapter:node()})
     console.log(`✅ Audio generado: ${filename}`);
     const filePath = join(OUTPUT_DIR, filename);
     AudioQueue.add(filePath);
-
+    if (!player.isPlaying) player.play();
     return {
       message: '¡Audio generado con éxito!',
       file: filename,

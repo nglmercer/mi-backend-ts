@@ -36,8 +36,7 @@ player.on('end', (data: { track: string }) => {
 });
 
 player.on('queue-end', () => {
-  console.log("EVENT: 'queue-end' -> Playback queue is empty. Application will exit.");
-  process.exit(0);
+  console.log("EVENT: 'queue-end' -> Playback queue is empty.");
 });
 
 player.on('error', (error: Error) => {
