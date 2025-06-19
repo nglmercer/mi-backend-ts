@@ -91,8 +91,11 @@ const app = new Elysia({adapter:node()})
     const { text, speakers } = body;
 
     console.log("🔊 Petición de generación de audio recibida.",text,speakers);
-    if (speakers && speakers.length > 0) {
-      console.log("   Modo multi-speaker detectado.");
+    if (!speakers || !Array.isArray(speakers)) {
+      return {
+        success:false,
+        message: "utilize una de las siguientes voces"+JSON.stringify(TTS_VOICE_NAMES)
+      }
     }
     
     const filename = `audio_${Date.now()}.wav`;
