@@ -18,7 +18,7 @@ export interface GenerateAudioOptions {
     speaker: string;
     voiceName: TTSVoiceName;
   }[];
-  cleanupOnError?: boolean; // Nueva opción para controlar limpieza en errores
+  cleanupOnError?: boolean;
 }
 
 // Interfaz para chunks internos
@@ -29,9 +29,16 @@ interface AudioChunk {
 }
 
 /**
- * Función auxiliar mejorada para guardar archivos .wav con mejor manejo de errores
+ * Función auxiliar mejorada para guardar archivos .wav
+ * Simplificada basada en los ejemplos proporcionados
  */
-async function saveWaveFile(filename: string, pcmData: Buffer): Promise<void> {
+async function saveWaveFile(
+  filename: string, 
+  pcmData: Buffer,
+  channels: number = 1,
+  rate: number = 24000,
+  sampleWidth: number = 2
+): Promise<void> {
   return new Promise((resolve, reject) => {
     try {
       // Crear directorio si no existe
@@ -39,16 +46,13 @@ async function saveWaveFile(filename: string, pcmData: Buffer): Promise<void> {
       fs.mkdir(dir, { recursive: true }).catch(() => {}); // Ignorar si ya existe
       
       const writer = new wav.FileWriter(filename, {
-        channels: 1,
-        sampleRate: 24000,
-        bitDepth: 16,
+        channels,
+        sampleRate: rate,
+        bitDepth: sampleWidth * 8,
       });
       
-      writer.on('finish', () => resolve());
-      writer.on('error', (error) => {
-        console.error(`Error escribiendo archivo WAV ${filename}:`, error);
-        reject(error);
-      });
+      writer.on('finish', resolve);
+      writer.on('error', reject);
       
       writer.write(pcmData);
       writer.end();
@@ -93,7 +97,6 @@ function validateSpeakers(speakers: { speaker: string; voiceName: TTSVoiceName; 
 
 /**
  * Divide el texto y speakers en chunks que contengan máximo 2 speakers únicos
- * Versión mejorada con mejor manejo de edge cases
  */
 function chunkTextBySpeakers(
   text: string, 
@@ -182,7 +185,6 @@ async function cleanupFiles(filePaths: string[]): Promise<void> {
       console.log(`🧹 Archivo temporal eliminado: ${filePath}`);
     } catch (error) {
       console.warn(`⚠️ No se pudo eliminar archivo temporal ${filePath}:`, error);
-      // No lanzar error, solo advertir
     }
   });
   
@@ -190,7 +192,8 @@ async function cleanupFiles(filePaths: string[]): Promise<void> {
 }
 
 /**
- * Combina múltiples archivos de audio en uno solo con mejor manejo de errores
+ * Combina múltiples archivos de audio en uno solo
+ * Versión corregida que maneja correctamente los headers WAV
  */
 async function combineAudioFiles(filePaths: string[], outputPath: string): Promise<void> {
   if (filePaths.length === 0) {
@@ -198,40 +201,77 @@ async function combineAudioFiles(filePaths: string[], outputPath: string): Promi
   }
   
   if (filePaths.length === 1) {
-    // Si solo hay un archivo, moverlo directamente
-    await fs.rename(filePaths[0], outputPath);
+    // Si solo hay un archivo, copiarlo directamente
+    await fs.copyFile(filePaths[0], outputPath);
     return;
   }
   
   try {
-    const combinedBuffers: Buffer[] = [];
+    const audioDataBuffers: Buffer[] = [];
+    let totalDataSize = 0;
+    let firstHeader: Buffer | null = null;
     
-    for (const filePath of filePaths) {
+    // Leer todos los archivos y extraer solo los datos de audio
+    for (let i = 0; i < filePaths.length; i++) {
+      const filePath = filePaths[i];
+      console.log(`📖 Leyendo archivo ${i + 1}/${filePaths.length}: ${filePath}`);
+      
       try {
-        const audioData = await fs.readFile(filePath);
-        // Saltar el header WAV (44 bytes) excepto para el primer archivo
-        const dataToAdd = combinedBuffers.length === 0 ? audioData : audioData.slice(44);
-        combinedBuffers.push(dataToAdd);
+        const fullAudioData = await fs.readFile(filePath);
+        
+        if (i === 0) {
+          // Guardar el header del primer archivo (primeros 44 bytes)
+          firstHeader = fullAudioData.slice(0, 44);
+          console.log(`📋 Header extraído del primer archivo (${firstHeader.length} bytes)`);
+        }
+        
+        // Extraer solo los datos de audio (después del byte 44)
+        const audioData = fullAudioData.slice(44);
+        audioDataBuffers.push(audioData);
+        totalDataSize += audioData.length;
+        
+        console.log(`✅ Datos de audio extraídos: ${audioData.length} bytes`);
+        
       } catch (error) {
-        console.error(`Error leyendo archivo temporal ${filePath}:`, error);
+        console.error(`❌ Error leyendo archivo temporal ${filePath}:`, error);
         throw new Error(`Failed to read temporary file: ${filePath}`);
       }
     }
     
-    const combinedBuffer = Buffer.concat(combinedBuffers);
+    if (!firstHeader) {
+      throw new Error('No se pudo extraer el header WAV del primer archivo');
+    }
+    
+    // Actualizar el tamaño del archivo en el header WAV
+    // El tamaño total del archivo es: header (44 bytes) + datos de audio
+    const totalFileSize = 44 + totalDataSize - 8; // -8 porque el campo de tamaño no incluye los primeros 8 bytes
+    const dataChunkSize = totalDataSize;
+    
+    // Actualizar bytes 4-7 (tamaño total del archivo - 8)
+    firstHeader.writeUInt32LE(totalFileSize - 8, 4);
+    
+    // Actualizar bytes 40-43 (tamaño del chunk de datos)
+    firstHeader.writeUInt32LE(dataChunkSize, 40);
+    
+    console.log(`📊 Header actualizado - Tamaño total: ${totalFileSize + 8} bytes, Datos: ${dataChunkSize} bytes`);
+    
+    // Combinar header actualizado con todos los datos de audio
+    const combinedBuffer = Buffer.concat([firstHeader, ...audioDataBuffers]);
+    
+    // Escribir el archivo final
     await fs.writeFile(outputPath, combinedBuffer);
     
-    console.log(`🎵 Audio combinado exitosamente: ${outputPath}`);
+    console.log(`🎵 Audio combinado exitosamente: ${outputPath} (${combinedBuffer.length} bytes totales)`);
     
   } catch (error) {
-    console.error('Error combinando archivos de audio:', error);
+    console.error('❌ Error combinando archivos de audio:', error);
     throw error;
   }
 }
 
 /**
  * Genera un archivo de audio a partir de texto usando la API de Google Gemini.
- * Versión mejorada con mejor manejo de errores y limpieza de archivos.
+ * Versión mejorada siguiendo los ejemplos de GoogleGenAI
  */
 export async function generateAudio(options: GenerateAudioOptions): Promise<string> {
   const {
@@ -256,8 +296,8 @@ export async function generateAudio(options: GenerateAudioOptions): Promise<stri
   const tempFiles: string[] = [];
   
   try {
-    //@ts-ignore
-    const ai = new GoogleGenAI(process.env.GEMINI_API_KEY);
+    // Inicializar GoogleGenAI como en los ejemplos
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
     // Si no hay speakers o hay 2 o menos, usar el método original
     if (!speakers || speakers.length <= 2) {
@@ -314,10 +354,10 @@ export async function generateAudio(options: GenerateAudioOptions): Promise<stri
 
 /**
  * Genera un solo archivo de audio (para uso interno)
- * Versión mejorada con mejor manejo de errores
+ * Mejorado siguiendo el patrón de los ejemplos de GoogleGenAI
  */
 async function generateSingleAudio(
-  ai: any, 
+  ai: GoogleGenAI, 
   options: { 
     text: string; 
     outputFilename: string; 
@@ -327,6 +367,7 @@ async function generateSingleAudio(
 ): Promise<string> {
   const { text, outputFilename, model, speakers } = options;
   
+  // Configurar el payload siguiendo los ejemplos proporcionados
   const requestPayload: any = {
     model,
     contents: [{ parts: [{ text }] }],
@@ -343,35 +384,41 @@ async function generateSingleAudio(
       throw new Error(`Error interno: Se intentó configurar ${speakers.length} speakers, pero el máximo es 2.`);
     }
     
-    // Si solo hay 1 speaker, agregar un speaker dummy para cumplir con el requisito de 2 speakers
-    let speakerConfigs = [...speakers];
+    // Si solo hay 1 speaker, usar voiceConfig simple como en el ejemplo
     if (speakers.length === 1) {
-      console.log("⚡ Solo 1 speaker detectado. Agregando speaker dummy para cumplir requisito de 2 speakers.");
-      speakerConfigs.push({
-        speaker: 'DUMMY_SPEAKER',
-        voiceName: 'Charon' // Usar una voz por defecto como dummy
-      });
+      console.log("🗣️ Configurando modo de un solo speaker.");
+      requestPayload.config.speechConfig.voiceConfig = {
+        prebuiltVoiceConfig: { voiceName: speakers[0].voiceName }
+      };
+    } else {
+      // Si hay 2 speakers, usar multiSpeakerVoiceConfig como en el ejemplo
+      console.log("🎭 Configurando modo multi-speaker.");
+      requestPayload.config.speechConfig.multiSpeakerVoiceConfig = {
+        speakerVoiceConfigs: speakers.map(s => ({
+          speaker: s.speaker,
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: s.voiceName }
+          }
+        }))
+      };
     }
-    
-    requestPayload.config.speechConfig.multiSpeakerVoiceConfig = {
-      speakerVoiceConfigs: speakerConfigs.map(s => ({
-        speaker: s.speaker,
-        voiceConfig: { prebuiltVoiceConfig: { voiceName: s.voiceName } }
-      }))
-    };
   } else {
-    console.log("🗣️ Modo de un solo hablante detectado.");
+    console.log("🗣️ Modo de un solo hablante sin configuración específica.");
   }
 
   try {
+    // Llamar a la API siguiendo el patrón de los ejemplos
     const response = await ai.models.generateContent(requestPayload);
-    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data as string | undefined;
+    
+    // Extraer los datos de audio siguiendo el patrón de los ejemplos
+    const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
 
     if (!data) {
       console.error("DEBUG: API response did not contain audio data.", JSON.stringify(response, null, 2));
       throw new Error("Failed to generate audio. Check the console for the full API response.");
     }
 
+    // Convertir y guardar el audio
     const audioBuffer = Buffer.from(data, 'base64');
     await saveWaveFile(outputFilename, audioBuffer);
     console.log(`💾 Audio guardado en: ${outputFilename}`);
