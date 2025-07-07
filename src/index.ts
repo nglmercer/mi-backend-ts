@@ -4,10 +4,8 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import Fastify, { FastifyInstance } from 'fastify';
 import fastifyCors from '@fastify/cors';
-
+import { Player, AudioQueue } from 'ffmpeg-audio-player';
 // Tus módulos de negocio no cambian
-import { AudioQueue } from './player/audio-queue.js';
-import Player from './player/audio-player.js';
 import { StreamElementsProvider } from './tts-provider.js';
 
 // Nuestro nuevo router

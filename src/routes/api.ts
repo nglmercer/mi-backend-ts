@@ -4,7 +4,7 @@ import { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { join } from 'node:path';
 
 // Importamos solo lo que necesitamos para las rutas
-import { AudioQueue } from '../player/audio-queue.js';
+import { AudioQueue } from 'ffmpeg-audio-player';
 import { streamElementsVoices } from '../constants/voices.js';
 
 // --- Esquema e Interfaz (específicos de estas rutas) ---
