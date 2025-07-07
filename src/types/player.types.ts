@@ -1,6 +1,3 @@
-import type Speaker from 'speaker';
-import type { FfmpegCommand } from 'fluent-ffmpeg';
-
 // Interfaz para el objeto que exporta audio-queue.ts
 export interface IAudioQueue {
   add: (filePath: string) => void;
