@@ -1,7 +1,7 @@
 import { writeFile } from 'node:fs/promises';
 import { streamElementsVoices } from './constants/voices.js';
-import type { TTSVoice, TTSSpeakOptions } from './types/player.types.js';
-
+export type TTSVoice = { name: string, lang?: string, default?: boolean };
+export type TTSSpeakOptions = { voiceName?: string };
 // --- Interfaces de Configuración ---
 interface TTSConfig {
   [key: string]: any;
