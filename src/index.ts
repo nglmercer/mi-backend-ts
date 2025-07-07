@@ -3,7 +3,6 @@ import { Elysia, t } from 'elysia';
 import { cors } from '@elysiajs/cors';
 import { join } from 'node:path';
 import { node } from '@elysiajs/node'
-import { existsSync } from 'node:fs';
 import { AudioQueue } from './player/audio-queue.js';
 import Player from './player/audio-player.js';
 import { StreamElementsProvider } from './tts-provider.js';
