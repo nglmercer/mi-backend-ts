@@ -1,4 +1,4 @@
-// src/audio-player.ts - Versión corregida con node-lame
+// src/audio-player.ts
 import fs from 'fs';
 import { EventEmitter } from 'events';
 import Speaker from 'speaker';
