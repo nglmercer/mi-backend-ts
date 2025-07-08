@@ -8,7 +8,7 @@ from flask import Flask, request, jsonify, send_from_directory, Response
 
 # Importaciones locales (estas no cambian)
 from config import PORT, AUDIO_OUTPUT_DIR
-from models import GenerateAudioRequest, TTSSpeakOptions # Modelos Pydantic aún útiles para la validación
+from models import GenerateAudioRequest, TTSSpeakOptions
 from tts_provider import StreamElementsProvider
 from audio_player import AudioPlayer
 
@@ -58,7 +58,6 @@ async def generate_audio():
     # 1. Obtener JSON de forma asíncrona
     json_data = request.get_json()
     
-    # 2. Validación manual sin Pydantic
     if not json_data or 'text' not in json_data or not isinstance(json_data['text'], str) or not json_data['text'].strip():
         return jsonify({"error": "El campo 'text' es requerido y no puede estar vacío."}), 400
     

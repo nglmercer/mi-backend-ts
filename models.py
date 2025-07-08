@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-# Ya no se necesita pydantic
-
 # Modelos para TTS
 @dataclass
 class TTSVoice:
@@ -22,7 +20,6 @@ class Speaker:
     Representa un hablante y la voz asignada.
     Corresponde a la descripción que antes estaba en Field.
     """
-    # El '...' en Pydantic.Field significa que el campo es obligatorio.
     # En dataclasses, cualquier campo sin un valor por defecto es obligatorio.
     speaker: str  # Nombre del hablante, e.g., 'NARRADOR'
     voiceName: str  # Nombre de la voz a usar, e.g., 'Brian'
