@@ -26,7 +26,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "dotenv": "^16.5.0",
     "fastify": "^5.4.0",
-    "ffmpeg-audio-player": "^1.0.5",
+    "ffmpeg-audio-player": "^1.0.7",
     "fluent-ffmpeg": "^2.1.3"
   }
 }
