@@ -52,36 +52,37 @@ def get_voices():
     return jsonify({"count": len(voices), "voices": voices})
 
 @app.route("/api/generate-audio", methods=['POST'])
-def generate_audio():
-    """Genera un archivo de audio a partir de texto."""
-    # Obtener el JSON del cuerpo de la solicitud
+async def generate_audio():
+    """Genera un archivo de audio a partir de texto (versión asíncrona)."""
+    
+    # 1. Obtener JSON de forma asíncrona
     json_data = request.get_json()
-    if not json_data or 'text' not in json_data:
-        return jsonify({"error": "El campo 'text' es requerido en el cuerpo JSON."}), 400
-
-    # Usamos el modelo Pydantic para validar y estructurar los datos
-    try:
-        request_body = GenerateAudioRequest(**json_data)
-    except Exception as e:
-        return jsonify({"error": f"Datos de solicitud inválidos: {e}"}), 400
+    
+    # 2. Validación manual sin Pydantic
+    if not json_data or 'text' not in json_data or not isinstance(json_data['text'], str) or not json_data['text'].strip():
+        return jsonify({"error": "El campo 'text' es requerido y no puede estar vacío."}), 400
+    
+    text_to_speak = json_data['text']
 
     timestamp = int(time.time() * 1000)
     final_filename = f"audio_{timestamp}.wav"
     final_filepath = os.path.join(AUDIO_OUTPUT_DIR, final_filename)
     
     try:
-        # La generación de audio asíncrona no es nativa en Flask,
-        # la ejecutamos de forma síncrona.
-        # Si la función fuera 'async', necesitarías un runner de eventos.
+        # Preparamos las opciones. El modelo TTSSpeakOptions sigue siendo útil aquí.
         opts = TTSSpeakOptions()
-        # await tts_provider.generate_audio_file(...) # Esto era de FastAPI/asyncio
-        # Lo llamamos de forma síncrona si es posible, o lo adaptamos.
-        # Asumiremos que StreamElementsProvider puede ser llamado síncronamente.
-        # Si no, se necesitaría una adaptación con asyncio.run().
-        tts_provider.generate_audio_file_sync(request_body.text, final_filepath, opts) # Asumimos que tienes una versión síncrona
+        # Permitimos que se especifique la voz en el JSON opcionalmente
+        if 'options' in json_data and isinstance(json_data.get('options'), dict) and 'voiceName' in json_data['options']:
+            opts.voiceName = json_data['options']['voiceName']
+        
+        # 3. Llamada directa con 'await' ya que estamos en una función 'async'
+        print(f"Iniciando generación de audio para: '{text_to_speak}'")
+        await tts_provider.generate_audio_file(text_to_speak, final_filepath, opts)
+        print(f"Generación de audio completada. Archivo: {final_filepath}")
         
         audio_player.add_to_queue(final_filepath)
-        audio_player.play()
+        audio_player.play() # Descomenta si quieres que la reproducción inicie automáticamente
+
     except (ValueError, IOError) as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -89,12 +90,13 @@ def generate_audio():
         return jsonify({"error": "Ocurrió un error interno al generar el audio."}), 500
 
     # Construir la URL de reproducción
-    playback_url = f"{request.host_url}api/audio/{final_filename}"
+    playback_url = request.host_url.strip('/') + f"/api/audio/{final_filename}"
 
     return jsonify({
         "message": "¡Audio generado con éxito!",
         "file": final_filename,
-        "playbackUrl": playback_url
+        "playbackUrl": playback_url,
+        "added_to_queue": True
     }), 201 # HTTP 201 Created
 
 @app.route("/api/audio/<string:filename>", methods=['GET'])

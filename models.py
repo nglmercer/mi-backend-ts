@@ -1,19 +1,40 @@
+from dataclasses import dataclass, field
 from typing import List, Optional
-from pydantic import BaseModel, Field
+
+# Ya no se necesita pydantic
 
 # Modelos para TTS
-class TTSVoice(BaseModel):
+@dataclass
+class TTSVoice:
+    """Representa una voz disponible para TTS."""
     name: str
     characteristic: Optional[str] = None
 
-class TTSSpeakOptions(BaseModel):
+@dataclass
+class TTSSpeakOptions:
+    """Opciones de habla para una solicitud TTS."""
     voiceName: Optional[str] = None
 
 # Modelos para API
-class Speaker(BaseModel):
-    speaker: str = Field(..., description="Nombre del hablante, e.g., 'NARRADOR'")
-    voiceName: str = Field(..., description="Nombre de la voz a usar, e.g., 'Brian'")
+@dataclass
+class Speaker:
+    """
+    Representa un hablante y la voz asignada.
+    Corresponde a la descripción que antes estaba en Field.
+    """
+    # El '...' en Pydantic.Field significa que el campo es obligatorio.
+    # En dataclasses, cualquier campo sin un valor por defecto es obligatorio.
+    speaker: str  # Nombre del hablante, e.g., 'NARRADOR'
+    voiceName: str  # Nombre de la voz a usar, e.g., 'Brian'
 
-class GenerateAudioRequest(BaseModel):
-    text: str = Field(..., description="Texto a convertir en audio. Usar [HABLANTE] para multi-voz.")
-    speakers: Optional[List[Speaker]] = Field(None, description="Lista de hablantes y sus voces asignadas.")
+@dataclass
+class GenerateAudioRequest:
+    """
+    Define la solicitud para generar un audio.
+    Puede incluir múltiples hablantes.
+    """
+    text: str  # Texto a convertir en audio. Usar [HABLANTE] para multi-voz.
+    
+    # Para listas u otros tipos mutables, el valor por defecto debe ser
+    # 'None' o usar 'default_factory' para evitar problemas. 'None' es perfecto aquí.
+    speakers: Optional[List[Speaker]] = None # Lista de hablantes y sus voces asignadas.
