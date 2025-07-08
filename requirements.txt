@@ -1,5 +1,4 @@
-fastapi[all]
-uvicorn
+Flask
 requests
 python-dotenv
 PyAudio
