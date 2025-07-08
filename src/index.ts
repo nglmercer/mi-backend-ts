@@ -31,7 +31,7 @@ const app: FastifyInstance = Fastify({
 });
 
 // --- Inicialización de Módulos ---
-const player = new Player(AudioQueue);
+const player = new Player(AudioQueue,{ preferNativeFFmpeg: true });
 const ttsProvider = new StreamElementsProvider();
 
 // --- Decorators (Inyección de Dependencias de Fastify) ---
