@@ -3,7 +3,7 @@ import requests
 from typing import List, Dict
 from models import TTSVoice, TTSSpeakOptions
 from config import STREAM_ELEMENTS_VOICES
-
+import subprocess # Importamos subprocess
 class TTSProvider:
     def __init__(self, config: Dict = {}):
         self.config = config
@@ -46,16 +46,37 @@ class StreamElementsProvider(TTSProvider):
 
         try:
             loop = asyncio.get_event_loop()
+            
             response = await loop.run_in_executor(
                 None, lambda: requests.get(self.endpoint, params=params, timeout=20)
             )
             response.raise_for_status()
 
-            with open(file_path, "wb") as f:
-                f.write(response.content)
+            mp3_content = response.content
 
-            print(f"[TTS] Archivo de audio guardado en: {file_path}")
+            # --- NUEVO BLOQUE DE CONVERSIÓN DE MP3 A WAV (usando subprocess) ---
+            def convert_mp3_to_wav(mp3_data: bytes, output_path: str):
+                command = ['ffmpeg', '-i', 'pipe:0', '-f', 'wav', '-y', output_path]
+                try:
+                    subprocess.run(command, input=mp3_data, check=True, capture_output=True)
+                except FileNotFoundError:
+                    # Este error ocurre si ffmpeg no está instalado o no está en el PATH
+                    print("[TTS] Error: El comando 'ffmpeg' no se encontró. Asegúrate de que esté instalado y en el PATH.")
+                    raise
+                except subprocess.CalledProcessError as e:
+                    # Este error ocurre si ffmpeg falla por alguna razón (ej. datos corruptos)
+                    print(f"[TTS] ffmpeg falló con el error: {e.stderr.decode()}")
+                    raise
+
+            await loop.run_in_executor(
+                None, convert_mp3_to_wav, mp3_content, file_path
+            )
+            
+            print(f"[TTS] Archivo de audio convertido a WAV y guardado en: {file_path}")
 
         except requests.RequestException as e:
             print(f"[TTS] Error generando el archivo de audio: {e}")
             raise IOError(f"Error en la API de StreamElements: {e}")
+        except Exception as e:
+            print(f"[TTS] Error durante la conversión de audio: {e}")
+            raise IOError(f"Error convirtiendo el audio a WAV: {e}")
